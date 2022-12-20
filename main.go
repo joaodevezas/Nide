@@ -72,8 +72,6 @@ func main() {
 
 		})
 
-		terminal.SetText("terminal")
-
 		bottom := container.NewVBox()
 		bottom.Add(console)
 		bottom.Add(terminal)
