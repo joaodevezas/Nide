@@ -1,12 +1,12 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
+
 	"os"
-	"os/exec"
-	"runtime"
 	"strings"
+
+	"github.com/fyne-io/terminal"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -19,8 +19,6 @@ import (
 var Terminal_info string
 var path string = "nothing"
 
-var keybind_list string
-
 var content *fyne.Container
 
 var file_path string
@@ -29,16 +27,12 @@ var folder_path string
 var explorer_list string
 var left *widget.Label = widget.NewLabel("")
 var terminal_hide bool = false
-var left_scroll *container.Scroll
-
-//var left_box *fyne.Container
 
 func main() {
 	for {
-		//Terminal_info = "Nothing"
 
 		app := app.New()
-		//app := headless.NewApp()
+
 		window := app.NewWindow("NIDE")
 		window.Resize(fyne.NewSize(800, 960))
 
@@ -48,33 +42,16 @@ func main() {
 		console := widget.NewEntry()
 
 		//terminal
+		terminal := terminal.New()
 
-		terminal := widget.NewMultiLineEntry()
-		terminal_run := &desktop.CustomShortcut{KeyName: fyne.KeyE, Modifier: fyne.KeyModifierControl}
-		window.Canvas().AddShortcut(terminal_run, func(shortcut fyne.Shortcut) {
-
-			if runtime.GOOS == "linux" {
-				shell, err := exec.Command(terminal.Text).Output()
-				if err != nil {
-					fmt.Println(err)
-				}
-				terminal.SetText("\n" + string(shell) + "\n")
-			}
-
-			if runtime.GOOS == "windows" {
-				powershell, err := exec.Command("powershell", terminal.Text).Output()
-				if err != nil {
-					fmt.Println(err)
-				}
-				terminal.SetText(string(powershell))
-
-			}
-
-		})
-
+		go func() {
+			_ = terminal.RunLocalShell()
+			app.Quit()
+		}()
+		termlayout := container.NewMax(terminal)
 		bottom := container.NewVBox()
 		bottom.Add(console)
-		bottom.Add(terminal)
+		bottom.Add(termlayout)
 
 		terminal_button := widget.NewButton("Hide terminal", func() {
 			terminal_hide = !terminal_hide
@@ -119,8 +96,8 @@ func main() {
 			folderDialog.Show()
 
 		})
-		//keybind button
 
+		//keybind button
 		right := widget.NewLabel("")
 		keybind_list := false
 
@@ -130,16 +107,18 @@ func main() {
 			keybind_list = !keybind_list
 
 			if keybind_list {
-				right.SetText("^S| Quick Save \n ^O| Write Out \n ^R| Read file \n ^Z| Exit \n ^E| Run terminal")
+				right.SetText("^S| Quick Save \n ^O| Write Out \n ^R| Read file \n ^Z| Exit \n ^E| Run terminal \n ^L| Show keybind list \n ^F| Open File \n ^H| Hide terminal")
 			} else {
 				right.SetText("")
 			}
+			left.Refresh()
+
 		})
 		top.Add(keybind_button)
 		top.Add(folder_button)
 		top.Add(terminal_button)
 
-		content = container.NewBorder(top, bottom, left, right, text_input)
+		//content = container.NewBorder(top, bottom, left, right, text_input)
 
 		//quicksave keybind
 		ctrlSave := &desktop.CustomShortcut{KeyName: fyne.KeyS, Modifier: fyne.KeyModifierControl}
@@ -147,6 +126,69 @@ func main() {
 			Terminal_info = "Text saved"
 			console.SetPlaceHolder(Terminal_info)
 			os.WriteFile(path, []byte(text_input.Text), 0666)
+			explorer_list = explorer_list + console.Text + "\n"
+			left.SetText(explorer_list)
+			left.Refresh()
+
+		})
+
+		ctrlkeylist := &desktop.CustomShortcut{KeyName: fyne.KeyL, Modifier: fyne.KeyModifierControl}
+		window.Canvas().AddShortcut(ctrlkeylist, func(shortcut fyne.Shortcut) {
+			keybind_list = !keybind_list
+
+			if keybind_list {
+				right.SetText("^S| Quick Save \n ^O| Write Out \n ^R| Read file \n ^Z| Exit \n ^E| Run terminal \n ^L| Show keybind list \n ^F| Open File \n ^H| Hide terminal")
+			} else {
+				right.SetText("")
+			}
+			left.Refresh()
+
+		})
+
+		ctrlhideterminal := &desktop.CustomShortcut{KeyName: fyne.KeyL, Modifier: fyne.KeyModifierControl}
+		window.Canvas().AddShortcut(ctrlhideterminal, func(shortcut fyne.Shortcut) {
+			terminal_hide = !terminal_hide
+
+			if terminal_hide {
+				terminal.Hide()
+			} else {
+				terminal.Show()
+			}
+		})
+
+		ctrlopenfile := &desktop.CustomShortcut{KeyName: fyne.KeyF, Modifier: fyne.KeyModifierControl}
+		window.Canvas().AddShortcut(ctrlopenfile, func(shortcut fyne.Shortcut) {
+			folderDialog := dialog.NewFileOpen(func(folder fyne.URIReadCloser, err error) {
+				if err == nil && folder != nil {
+					file_path = folder.URI().String()
+					folder_path = string(file_path)
+					folder_lenght := len(folder_path)
+
+					for string(folder_path[folder_lenght-1]) != "/" {
+						folder_path = folder_path[:folder_lenght-1]
+						folder_lenght = len(folder_path)
+					}
+
+					folder_path = strings.Replace(folder_path, "file://", "", 1)
+
+					files, err := ioutil.ReadDir(folder_path)
+					if err != nil {
+						panic(err)
+					}
+
+					for _, f := range files {
+						explorer_list += f.Name()
+						explorer_list += "\n"
+					}
+
+					left.SetText(explorer_list)
+					left.Refresh()
+
+				}
+			}, window)
+
+			folderDialog.Show()
+
 		})
 
 		//save keybind
@@ -157,6 +199,10 @@ func main() {
 			path = console.Text
 			path = folder_path + path
 			os.WriteFile(path, []byte(text_input.Text), 0666)
+			explorer_list = explorer_list + console.Text + "\n"
+			left.SetText(explorer_list)
+			left.Refresh()
+
 		})
 
 		//read file
@@ -171,13 +217,18 @@ func main() {
 			}
 			text_input.Text = string(read_file)
 			text_input.Refresh()
+			explorer_list = explorer_list + console.Text + "\n"
+
 		})
 
 		//Quit the application
 		Quit := &desktop.CustomShortcut{KeyName: fyne.KeyZ, Modifier: fyne.KeyModifierControl}
 		window.Canvas().AddShortcut(Quit, func(shortcut fyne.Shortcut) {
 			app.Quit()
+			left.Refresh()
+
 		})
+		content = container.NewBorder(top, bottom, left, right, text_input)
 
 		window.SetContent(content)
 		window.ShowAndRun()
